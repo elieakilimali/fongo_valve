@@ -1,32 +1,40 @@
-from rest_framework import status
+from rest_framework import status, generics
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from .serialisers import CustomerUserSerializer
 from django.contrib.auth import authenticate
+from fongo_valve.apps.users.serializers import CustomerUserSerializer, LoginSerializer
+from fongo_valve.apps.users.models import CustomerUser
+from rest_framework.permissions import AllowAny
+from rest_framework_simplejwt.tokens import RefreshToken
 
+class UserRegisterView(generics.CreateAPIView):
+    """
+    Vue pour inscrire un nouvel utilisateur.
+    """
+    queryset = CustomerUser.objects.all()
+    serializer_class = CustomerUserSerializer
+    permission_classes = [AllowAny]  # Autoriser tout le monde à s'inscrire
 
-# registered 
-
-class RegisterView(APIView):
-    def post(self,request):
-        serializer =CustomerUserSerializer(data=request.data)
-
-        if serializer.is_valid():
-            user = serializer.save()
-            return Response(serializer.data , status=status.HTTP_201_CREATED)
-        return Response(serializer.errors , status=status.HTTP_400_BAD_REQUEST)
-
-# login 
 class LoginView(APIView):
-    def post(self,request):
-        from rest_framework_simplejwt.tokens import RefreshToken
-        user = authenticate(username= request.data['username'], password = request.data['password'])
-        if user is not None:
-            refresh = RefreshToken.for_user(user)
-            return Response(
-                {
+    """
+    Vue pour la connexion de l'utilisateur.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        if serializer.is_valid():
+            email = serializer.validated_data['email']
+            password = serializer.validated_data['password']
+            user = authenticate(email=email, password=password)
+
+            if user is not None:
+                # Générer un token JWT
+                refresh = RefreshToken.for_user(user)
+                return Response({
                     'refresh': str(refresh),
-                    'access': str(refresh.access_token)
-                }
-            )
-        return Response({"detail":"Invalid Creditial"}, status=status.HTTP_401_UNAUTHORIZED)
+                    'access': str(refresh.access_token),
+                })
+            else:
+                return Response({'detail': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
